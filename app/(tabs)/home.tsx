@@ -1,310 +1,233 @@
-import React, {useState} from 'react';
-import {Text, View, Image, ScrollView, Modal, TextInput, Pressable} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Text, View, Image, ScrollView, Pressable, FlatList, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
+import { firestore } from '../../firebaseConfig';
+import { collection, query, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
+import { Announcement } from '../../types/firestore';
+import { useRouter } from 'expo-router';
 
-export default function Home() {
-    const [modalVisible, setModalVisible] = useState(false);
-    const [announcements, setAnnouncements] = useState([
-        {title: 'Tech Week', description: 'HOT 4.0 on 22nd May 2025'}
-    ]);
+export default function HomeScreen() {
+    const { userProfile, isLoading: authLoading } = useAuth();
+    const router = useRouter();
+    const [announcementsList, setAnnouncementsList] = useState<Announcement[]>([]);
+    const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+
+    // Keep existing events state if they are not being moved to Firestore yet
     const [events, setEvents] = useState([
         {title: "Children's Day Celebration", date: '26th May 2025'}
     ]);
-    const [newTitle, setNewTitle] = useState('');
-    const [newDescription, setNewDescription] = useState('');
-    const [type, setType] = useState<'announcement' | 'event'>('announcement');
-
-    const handleAdd = () => {
-        if (type === 'announcement') {
-            setAnnouncements([...announcements, {title: newTitle, description: newDescription}]);
-        } else {
-            setEvents([...events, {title: newTitle, date: newDescription}]);
-        }
-        setNewTitle('');
-        setNewDescription('');
-        setModalVisible(false);
+     const handleDeleteEvent = (index: number) => { // Kept if events are still local
+        const newEvents = [...events];
+        newEvents.splice(index, 1);
+        setEvents(newEvents);
     };
 
-    const handleDelete = (index: number, type: 'announcement' | 'event') => {
-        if (type === 'announcement') {
-            const newAnnouncements = [...announcements];
-            newAnnouncements.splice(index, 1);
-            setAnnouncements(newAnnouncements);
-        } else {
-            const newEvents = [...events];
-            newEvents.splice(index, 1);
-            setEvents(newEvents);
+
+    useEffect(() => {
+        if (authLoading) {
+            return; // Wait for auth to complete
         }
-    };
+        setLoadingAnnouncements(true);
+        const announcementsQuery = query(collection(firestore, 'announcements'), orderBy('createdAt', 'desc'));
 
-    return (
-        <View style={{flex: 1, backgroundColor: "white"}}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{paddingBottom: 100}}
-                style={{flex: 1, paddingHorizontal: 24}}
-            >
-                <Image
-                    style={{
-                        width: 80,
-                        height: 80,
-                        marginTop: 60,
-                        marginBottom: 32,
-                        alignSelf: "center"
-                    }}
-                    source={require("C://Users//victo//OneDrive//Desktop//app3//GPC-App//constants//images//logo.png")}
-                />
+        const unsubscribe = onSnapshot(announcementsQuery, (snapshot) => {
+            const fetchedAnnouncements = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as Announcement));
+            setAnnouncementsList(fetchedAnnouncements);
+            setLoadingAnnouncements(false);
+        }, (error) => {
+            console.error("Error fetching announcements: ", error);
+            setLoadingAnnouncements(false);
+        });
 
-                <Text style={{
-                    fontSize: 24,
-                    fontWeight: "700",
-                    color: "#012f01",
-                    marginBottom: 16,
-                }}>
-                    Announcements 📢
+        return () => unsubscribe();
+    }, [authLoading]);
+
+    const renderAnnouncementItem = ({ item }: { item: Announcement }) => (
+        <View style={styles.announcementItem}>
+            <Text style={styles.announcementTitle}>{item.title}</Text>
+            <Text style={styles.announcementContent}>{item.content}</Text>
+            {item.createdAt && (
+                <Text style={styles.announcementDate}>
+                    Posted: {new Date(item.createdAt.seconds * 1000).toLocaleDateString()}
                 </Text>
-
-                {announcements.map((announcement, index) => (
-                    <View key={index} style={{
-                        backgroundColor: "white",
-                        borderRadius: 16,
-                        padding: 20,
-                        marginBottom: 24,
-                        shadowColor: '#000',
-                        shadowOffset: {width: 0, height: 2},
-                        shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 3,
-                    }}>
-                        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                            <Text style={{fontSize: 18, color: "#b39a0c", fontWeight: "600", marginBottom: 8}}>
-                                {announcement.title}
-                            </Text>
-                            <Pressable onPress={() => handleDelete(index, 'announcement')}>
-                                <Text style={{color: 'red', fontSize: 16}}>×</Text>
-                            </Pressable>
-                        </View>
-                        <Text style={{fontSize: 15, color: "#666"}}>
-                            {announcement.description}
-                        </Text>
-                    </View>
-                ))}
-
-                <Text style={{
-                    fontSize: 24,
-                    fontWeight: "700",
-                    color: "#012f01",
-                    marginBottom: 16,
-                }}>
-                    Recent Activity
-                </Text>
-
-                <View style={{
-                    backgroundColor: "white",
-                    borderRadius: 16,
-                    padding: 20,
-                    marginBottom: 24,
-                    shadowColor: '#000',
-                    shadowOffset: {width: 0, height: 2},
-                    shadowOpacity: 0.1,
-                    shadowRadius: 8,
-                    elevation: 3,
-                }}>
-                    <Text style={{fontSize: 18, color: "#b39a0c", fontWeight: "600", marginBottom: 12}}>
-                        Recently Viewed Notes
-                    </Text>
-                    <Text style={{fontSize: 15, color: "#666", marginBottom: 8}}>
-                        MathemathicsWeek5
-                    </Text>
-                    <Text style={{fontSize: 15, color: "#666"}}>
-                        PhysicsWeek4
-                    </Text>
-                </View>
-
-                <View style={{
-                    backgroundColor: "white",
-                    borderRadius: 16,
-                    padding: 20,
-                    marginBottom: 24,
-                    shadowColor: '#000',
-                    shadowOffset: {width: 0, height: 2},
-                    shadowOpacity: 0.1,
-                    shadowRadius: 8,
-                    elevation: 3,
-                }}>
-                    <Text style={{fontSize: 18, color: "#b39a0c", fontWeight: "600", marginBottom: 8}}>
-                        Recently Attempted Test
-                    </Text>
-                    <Text style={{fontSize: 15, color: "#666"}}>
-                        No recent test
-                    </Text>
-                </View>
-
-                <Text style={{
-                    fontSize: 24,
-                    fontWeight: "700",
-                    color: "#012f01",
-                    marginBottom: 16,
-                }}>
-                    Upcoming Events
-                </Text>
-
-                {events.map((event, index) => (
-                    <View key={index} style={{
-                        backgroundColor: "white",
-                        borderRadius: 16,
-                        padding: 20,
-                        marginBottom: 24,
-                        shadowColor: '#000',
-                        shadowOffset: {width: 0, height: 2},
-                        shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 3,
-                    }}>
-                        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                            <Text style={{fontSize: 18, color: "#b39a0c", fontWeight: "600", marginBottom: 8}}>
-                                {event.title}
-                            </Text>
-                            <Pressable onPress={() => handleDelete(index, 'event')}>
-                                <Text style={{color: 'red', fontSize: 16}}>×</Text>
-                            </Pressable>
-                        </View>
-                        <Text style={{fontSize: 15, color: "#666"}}>
-                            Date: {event.date}
-                        </Text>
-                    </View>
-                ))}
-            </ScrollView>
-
-            <Pressable
-                style={{
-                    position: 'absolute',
-                    bottom: 90,
-                    right: 20,
-                    backgroundColor: '#b39a0c',
-                    width: 60,
-                    height: 60,
-                    borderRadius: 30,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    shadowColor: '#000',
-                    shadowOffset: {width: 0, height: 2},
-                    shadowOpacity: 0.25,
-                    shadowRadius: 4,
-                    elevation: 5,
-                    zIndex: 999
-                }}
-                onPress={() => setModalVisible(true)}
-            >
-                <Text style={{fontSize: 30, color: 'white'}}>+</Text>
-            </Pressable>
-
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
-            >
-                <View style={{
-                    flex: 1,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    backgroundColor: 'rgba(0,0,0,0.5)'
-                }}>
-                    <View style={{
-                        backgroundColor: 'white',
-                        borderRadius: 20,
-                        padding: 20,
-                        width: '90%',
-                        shadowColor: '#000',
-                        shadowOffset: {width: 0, height: 2},
-                        shadowOpacity: 0.25,
-                        shadowRadius: 4,
-                        elevation: 5,
-                    }}>
-                        <Text style={{fontSize: 20, fontWeight: '600', marginBottom: 15, color: '#012f01'}}>
-                            Add New Item
-                        </Text>
-
-                        <View style={{flexDirection: 'row', marginBottom: 15}}>
-                            <Pressable
-                                style={{
-                                    flex: 1,
-                                    padding: 10,
-                                    backgroundColor: type === 'announcement' ? '#012f01' : '#e5e5e5',
-                                    borderRadius: 8,
-                                    marginRight: 5,
-                                    alignItems: 'center'
-                                }}
-                                onPress={() => setType('announcement')}
-                            >
-                                <Text style={{color: type === 'announcement' ? 'white' : '#666'}}>Announcement</Text>
-                            </Pressable>
-                            <Pressable
-                                style={{
-                                    flex: 1,
-                                    padding: 10,
-                                    backgroundColor: type === 'event' ? '#012f01' : '#e5e5e5',
-                                    borderRadius: 8,
-                                    marginLeft: 5,
-                                    alignItems: 'center'
-                                }}
-                                onPress={() => setType('event')}
-                            >
-                                <Text style={{color: type === 'event' ? 'white' : '#666'}}>Event</Text>
-                            </Pressable>
-                        </View>
-
-                        <TextInput
-                            style={{
-                                borderWidth: 1,
-                                borderColor: '#e5e5e5',
-                                borderRadius: 8,
-                                padding: 10,
-                                marginBottom: 10
-                            }}
-                            placeholder="Title"
-                            value={newTitle}
-                            onChangeText={setNewTitle}
-                        />
-
-                        <TextInput
-                            style={{
-                                borderWidth: 1,
-                                borderColor: '#e5e5e5',
-                                borderRadius: 8,
-                                padding: 10,
-                                marginBottom: 15
-                            }}
-                            placeholder={type === 'event' ? "Date" : "Description"}
-                            value={newDescription}
-                            onChangeText={setNewDescription}
-                        />
-
-                        <View style={{flexDirection: 'row', justifyContent: 'flex-end'}}>
-                            <Pressable
-                                style={{
-                                    padding: 10,
-                                    marginRight: 10,
-                                    borderRadius: 8,
-                                }}
-                                onPress={() => setModalVisible(false)}
-                            >
-                                <Text style={{color: '#666'}}>Cancel</Text>
-                            </Pressable>
-                            <Pressable
-                                style={{
-                                    backgroundColor: '#b39a0c',
-                                    padding: 10,
-                                    borderRadius: 8,
-                                }}
-                                onPress={handleAdd}
-                            >
-                                <Text style={{color: 'white'}}>Add</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            )}
         </View>
     );
-};
+
+    return (
+        <SafeAreaView style={styles.safeArea}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContentContainer}
+                style={styles.scrollViewStyle}
+            >
+                <Image
+                    style={styles.logo}
+                    source={require("../../constants/images/logo.png")} // Corrected path
+                />
+
+                <View style={styles.sectionHeaderContainer}>
+                    <Text style={styles.sectionTitle}>Announcements 📢</Text>
+                    {userProfile?.role === 'admin' && (
+                        <Pressable onPress={() => router.push('/createAnnouncement')} style={styles.addButton}>
+                            <Text style={styles.addButtonText}>+ Add</Text>
+                        </Pressable>
+                    )}
+                </View>
+                
+                {loadingAnnouncements ? (
+                    <ActivityIndicator size="large" color="#012f01" style={{marginTop: 20}}/>
+                ) : announcementsList.length === 0 ? (
+                     <Text style={styles.noItemsText}>No announcements yet.</Text>
+                ) : (
+                    <FlatList
+                        data={announcementsList}
+                        renderItem={renderAnnouncementItem}
+                        keyExtractor={(item) => item.id!}
+                        scrollEnabled={false} // Disable FlatList scrolling, ScrollView handles it
+                        // ListHeaderComponent={<Text style={styles.sectionTitle}>Announcements 📢</Text>} // Title now outside
+                    />
+                )}
+
+
+                {/* Static Sections - Kept as is for now */}
+                <Text style={styles.sectionTitle}>Recent Activity</Text>
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Recently Viewed Notes</Text>
+                    <Text style={styles.cardContent}>MathemathicsWeek5</Text>
+                    <Text style={styles.cardContent}>PhysicsWeek4</Text>
+                </View>
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Recently Attempted Test</Text>
+                    <Text style={styles.cardContent}>No recent test</Text>
+                </View>
+
+                <Text style={styles.sectionTitle}>Upcoming Events</Text>
+                 {events.length === 0 ? (
+                    <Text style={styles.noItemsText}>No upcoming events.</Text>
+                ) : (
+                    events.map((event, index) => (
+                        <View key={index} style={styles.card}>
+                             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                                <Text style={styles.cardTitle}>{event.title}</Text>
+                                {userProfile?.role === 'admin' && ( // Example: Admin can delete local events
+                                    <Pressable onPress={() => handleDeleteEvent(index)}>
+                                        <Text style={{color: 'red', fontSize: 16}}>×</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                            <Text style={styles.cardContent}>Date: {event.date}</Text>
+                        </View>
+                    ))
+                )}
+            </ScrollView>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: "#fff",
+    },
+    scrollViewStyle: {
+        flex: 1,
+        paddingHorizontal: 20, // Consistent padding
+    },
+    scrollContentContainer: {
+        paddingBottom: 40, // Ensure space at bottom
+    },
+    logo: {
+        width: 70, // Slightly smaller logo
+        height: 70,
+        marginTop: 30, // Adjusted margin
+        marginBottom: 25,
+        alignSelf: "center"
+    },
+    sectionHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionTitle: {
+        fontSize: 22, // Slightly smaller
+        fontWeight: "700",
+        color: "#012f01",
+        // marginBottom: 12, // Moved to container or handled by spacing
+    },
+    addButton: {
+        backgroundColor: '#b39a0c',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        elevation: 2,
+    },
+    addButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    announcementItem: {
+        backgroundColor: "#f9f9f9", // Lighter background for items
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 15, // Consistent margin
+        borderWidth: 1,
+        borderColor: '#eee',
+        // shadowColor: '#000',
+        // shadowOffset: {width: 0, height: 1},
+        // shadowOpacity: 0.05,
+        // shadowRadius: 3,
+        // elevation: 1, // Subtle elevation
+    },
+    announcementTitle: {
+        fontSize: 17, // Slightly smaller
+        color: "#b39a0c",
+        fontWeight: "600",
+        marginBottom: 6,
+    },
+    announcementContent: {
+        fontSize: 14, // Slightly smaller
+        color: "#555", // Darker gray
+        lineHeight: 20, // Improved readability
+    },
+    announcementDate: {
+        fontSize: 12,
+        color: '#777',
+        marginTop: 8,
+        textAlign: 'right',
+    },
+    noItemsText: {
+        textAlign: 'center',
+        color: '#777',
+        marginVertical: 20,
+        fontSize: 15,
+    },
+    // Styles for existing static cards
+    card: {
+        backgroundColor: "white",
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 20, // Consistent margin
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.08, // Softer shadow
+        shadowRadius: 6,
+        elevation: 2, // Softer elevation
+    },
+    cardTitle: {
+        fontSize: 18,
+        color: "#b39a0c",
+        fontWeight: "600",
+        marginBottom: 10, // Consistent margin
+    },
+    cardContent: {
+        fontSize: 15,
+        color: "#666",
+        marginBottom: 5, // Consistent margin
+    }
+});
